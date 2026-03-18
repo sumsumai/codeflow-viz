@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>codeflow-viz</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="app">
+    <header id="toolbar">
+      <div class="toolbar-left">
+        <h1 class="logo">codeflow-viz</h1>
+        <div class="view-toggle">
+          <button id="btn-files" class="toggle-btn active" data-view="files">Files</button>
+          <button id="btn-functions" class="toggle-btn" data-view="functions">Functions</button>
+        </div>
+      </div>
+      <div class="toolbar-center">
+        <div id="breadcrumb"></div>
+      </div>
+      <div class="toolbar-right">
+        <div id="stats" class="stats"></div>
+        <button id="btn-refresh" class="icon-btn" title="Re-analyze">&#x21bb;</button>
+        <button id="btn-fit" class="icon-btn" title="Fit to screen">&#x2922;</button>
+      </div>
+    </header>
+
+    <div id="main">
+      <canvas id="canvas"></canvas>
+
+      <!-- Control flow detail panel -->
+      <div id="detail-panel" class="panel hidden">
+        <div class="panel-header">
+          <h2 id="detail-title"></h2>
+          <button id="detail-close" class="icon-btn">&times;</button>
+        </div>
+        <div id="detail-meta"></div>
+        <div id="detail-flow"></div>
+      </div>
+    </div>
+
+    <div id="minimap">
+      <canvas id="minimap-canvas"></canvas>
+    </div>
+
+    <!-- Loading overlay -->
+    <div id="loading" class="overlay">
+      <div class="loader">
+        <div class="spinner"></div>
+        <p>Analyzing codebase...</p>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

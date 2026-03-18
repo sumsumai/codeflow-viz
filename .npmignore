@@ -1,0 +1,6 @@
+sample-project/
+.claude/
+node_modules/
+*.md
+.git/
+.gitignore

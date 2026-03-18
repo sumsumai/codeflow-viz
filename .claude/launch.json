@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "node-flow",
+      "runtimeExecutable": "codeflow-viz",
+      "runtimeArgs": ["./sample-project", "--port", "3000", "--no-open"],
+      "port": 3000
+    }
+  ]
+}

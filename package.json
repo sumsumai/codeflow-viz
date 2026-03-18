@@ -1,0 +1,45 @@
+{
+  "name": "codeflow-viz",
+  "version": "1.0.0",
+  "description": "npx codeflow-viz — instantly visualize any codebase as an interactive node graph",
+  "main": "src/server.js",
+  "bin": {
+    "codeflow-viz": "./bin/cli.js"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "public/"
+  ],
+  "scripts": {
+    "start": "node bin/cli.js",
+    "dev": "node bin/cli.js --port 3333"
+  },
+  "keywords": [
+    "code-visualization",
+    "call-graph",
+    "control-flow",
+    "node-graph",
+    "codebase",
+    "architecture",
+    "ast",
+    "javascript",
+    "typescript",
+    "developer-tools"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": ""
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "dependencies": {
+    "@babel/parser": "^7.24.0",
+    "@babel/traverse": "^7.24.0",
+    "express": "^4.18.0",
+    "open": "^10.0.0",
+    "glob": "^10.3.0"
+  }
+}
