@@ -87,21 +87,66 @@ body {
 .issues-text h2 { font-size: 16px; font-weight: 600; color: var(--text-bright); }
 .issues-text p { font-size: 13px; color: var(--text-dim); margin-top: 2px; }
 
-.issues-list {
-  margin-top: 12px; display: flex; flex-direction: column; gap: 6px;
-}
-.issue-item {
-  display: flex; align-items: center; gap: 8px;
-  padding: 6px 12px; background: var(--bg); border-radius: 6px;
-  font-size: 12px; cursor: pointer; transition: background 0.12s;
-}
-.issue-item:hover { background: var(--bg-card-hover); }
 .issue-dot {
   width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
 }
 .issue-dot.error { background: var(--red); }
 .issue-dot.warning { background: var(--orange); }
-.issue-where { color: var(--text-dim); margin-left: auto; font-size: 11px; }
+
+/* Issue detail cards */
+.issues-detail-list {
+  display: flex; flex-direction: column; gap: 12px; margin-bottom: 28px;
+}
+
+.issue-card {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 18px 20px; cursor: pointer;
+  transition: all 0.12s;
+}
+.issue-card:hover { background: var(--bg-card-hover); }
+.issue-card.error { border-left: 3px solid var(--red); }
+.issue-card.warning { border-left: 3px solid var(--orange); }
+
+.issue-card-header {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
+}
+.issue-card-title {
+  font-size: 14px; font-weight: 600; color: var(--text-bright);
+}
+.issue-card-file {
+  margin-left: auto; font-size: 11px; color: var(--text-dim);
+  font-family: "SF Mono", Monaco, monospace;
+}
+
+.issue-card-summary {
+  font-size: 13px; color: var(--text); line-height: 1.5;
+  margin-bottom: 12px;
+}
+
+.issue-card-fix {
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: 8px; overflow: hidden;
+}
+
+.fix-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 12px; border-bottom: 1px solid var(--border);
+  font-size: 12px; color: var(--text-dim);
+}
+
+.copy-btn {
+  background: var(--accent); color: var(--bg); border: none;
+  padding: 3px 12px; border-radius: 4px; font-size: 11px;
+  font-weight: 600; cursor: pointer; transition: all 0.12s;
+}
+.copy-btn:hover { opacity: 0.85; }
+.copy-btn.copied { background: var(--green); }
+
+.fix-prompt {
+  padding: 10px 12px; font-size: 12px; line-height: 1.5;
+  color: var(--text); font-family: "SF Mono", Monaco, monospace;
+  white-space: pre-wrap; word-break: break-word;
+}
 
 /* Flow grid */
 .flows-section-title {

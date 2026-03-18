@@ -88,10 +88,13 @@ function detectIssues(functions, calls, flows, fnMap, callAdj) {
       issues.push({
         id: `unresolved_${key}`,
         fnId: c.from,
+        file: fromFn.filePath,
         severity: "warning",
         type: "unresolved-call",
         title: `Calls "${c.to}" but it can't be found`,
+        summary: `The function ${fromFn.name}() tries to use ${c.to}(), but that function doesn't exist in your code. This will crash when it runs.`,
         description: `${fromFn.name}() calls ${c.to}() but it's not defined in this codebase. Could be a missing import or typo.`,
+        fix: `In the file ${fromFn.filePath}, the function ${fromFn.name}() calls ${c.to}() but it's not imported or defined. Please check if it's a typo, or add the missing import for ${c.to}.`,
       });
     }
   }
@@ -106,10 +109,13 @@ function detectIssues(functions, calls, flows, fnMap, callAdj) {
         issues.push({
           id: `no_error_handling_${fn.id}`,
           fnId: fn.id,
+          file: fn.filePath,
           severity: "error",
           type: "no-error-handling",
           title: "No error handling",
+          summary: `${fn.name}() can crash your app. It's an entry point that calls other functions, but if any of them fail, nothing catches the error. Your users will see a server crash or unresponsive page.`,
           description: `${fn.name}() is an entry point with no try/catch. If something fails, the error goes unhandled.`,
+          fix: `In ${fn.filePath}, add error handling to the function ${fn.name}(). Wrap the body in a try/catch block. In the catch, return an appropriate error response (like a 500 status) so the app doesn't crash when something goes wrong.`,
         });
       }
     }
@@ -125,10 +131,13 @@ function detectIssues(functions, calls, flows, fnMap, callAdj) {
         issues.push({
           id: `dead_code_${fn.id}`,
           fnId: fn.id,
+          file: fn.filePath,
           severity: "warning",
           type: "dead-code",
           title: "Unused function",
+          summary: `${fn.name}() exists in your code but nothing ever uses it. It's probably leftover code that can be safely removed to keep things clean.`,
           description: `${fn.name}() is never called anywhere. It might be dead code that can be removed.`,
+          fix: `In ${fn.filePath}, the function ${fn.name}() is never called by any other function. If it's not needed, please remove it. If it should be used somewhere, check where it needs to be called or exported.`,
         });
       }
     }
@@ -147,10 +156,13 @@ function detectIssues(functions, calls, flows, fnMap, callAdj) {
         issues.push({
           id: `no_validation_${fn.id}`,
           fnId: fn.id,
+          file: fn.filePath,
           severity: "warning",
           type: "no-validation",
           title: "No input validation",
+          summary: `${fn.name}() accepts user input but doesn't check if it's valid. A user could send empty fields, wrong data types, or malicious input that breaks your app.`,
           description: `${fn.name}() doesn't validate its input. Users could send bad data that causes errors.`,
+          fix: `In ${fn.filePath}, the function ${fn.name}() receives user input but doesn't validate it. Add input validation at the top of the function — check that required fields exist, are the right type, and are within expected ranges. Return a 400 error with a helpful message if validation fails.`,
         });
       }
     }
@@ -163,10 +175,13 @@ function detectIssues(functions, calls, flows, fnMap, callAdj) {
       issues.push({
         id: `complex_${fn.id}`,
         fnId: fn.id,
+        file: fn.filePath,
         severity: "warning",
         type: "too-complex",
         title: "This function does too much",
+        summary: `${fn.name}() is doing a lot of different things in one place. This makes it hard to understand and easy to break when you make changes.`,
         description: `${fn.name}() has a complexity of ${complexity}. Consider breaking it into smaller pieces.`,
+        fix: `In ${fn.filePath}, the function ${fn.name}() is too complex (complexity score: ${complexity}). Break it into smaller, focused functions — each one should do one thing. Extract the different logical steps into their own functions with clear names.`,
       });
     }
   }

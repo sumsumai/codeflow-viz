@@ -130,36 +130,68 @@
     const issues = graphData.issues;
     const hasErrors = issues.some((i) => i.severity === "error");
 
+    const wrapper = document.createElement("div");
+
+    // Header
     const banner = document.createElement("div");
     banner.className = `issues-banner ${hasErrors ? "has-errors" : ""}`;
     banner.innerHTML = `
       <span class="issues-icon">${hasErrors ? "\u{1F6A8}" : "\u26A0\uFE0F"}</span>
       <div class="issues-text">
         <h2>${issues.length} issue${issues.length > 1 ? "s" : ""} found</h2>
-        <p>These could cause problems for your users.</p>
+        <p>Here's what's wrong and how to fix it.</p>
       </div>
     `;
+    wrapper.appendChild(banner);
 
+    // Individual issue cards with summary + fix prompt
     const list = document.createElement("div");
-    list.className = "issues-list";
+    list.className = "issues-detail-list";
 
     for (const iss of issues) {
-      const item = document.createElement("div");
-      item.className = "issue-item";
-      item.innerHTML = `
-        <span class="issue-dot ${iss.severity}"></span>
-        <span>${esc(iss.description)}</span>
+      const card = document.createElement("div");
+      card.className = `issue-card ${iss.severity}`;
+      card.innerHTML = `
+        <div class="issue-card-header">
+          <span class="issue-dot ${iss.severity}"></span>
+          <span class="issue-card-title">${esc(iss.title)}</span>
+          <span class="issue-card-file">${esc(iss.file || "")}</span>
+        </div>
+        <div class="issue-card-summary">${esc(iss.summary || iss.description)}</div>
+        <div class="issue-card-fix">
+          <div class="fix-header">
+            <span>\u{1FA84} Fix it — copy this prompt:</span>
+            <button class="copy-btn" data-prompt="${esc(iss.fix || "")}">Copy</button>
+          </div>
+          <div class="fix-prompt">${esc(iss.fix || "")}</div>
+        </div>
       `;
-      // Click to navigate to the flow containing this issue
-      item.addEventListener("click", () => {
+
+      // Copy button
+      const copyBtn = card.querySelector(".copy-btn");
+      copyBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        navigator.clipboard.writeText(iss.fix || "").then(() => {
+          copyBtn.textContent = "Copied!";
+          copyBtn.classList.add("copied");
+          setTimeout(() => {
+            copyBtn.textContent = "Copy";
+            copyBtn.classList.remove("copied");
+          }, 2000);
+        });
+      });
+
+      // Click card to navigate to flow
+      card.addEventListener("click", () => {
         const flow = graphData.flows.find((f) => f.steps.some((s) => s.id === iss.fnId));
         if (flow) showFlowDetail(flow.id);
       });
-      list.appendChild(item);
+
+      list.appendChild(card);
     }
 
-    banner.appendChild(list);
-    return banner;
+    wrapper.appendChild(list);
+    return wrapper;
   }
 
   function renderFlowCard(flow) {
