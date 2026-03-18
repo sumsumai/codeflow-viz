@@ -2,10 +2,11 @@
   "use strict";
 
   let graphData = null;
-  let activeFlowId = null;
+  let currentView = "overview"; // "overview" | "detail"
 
   function init() {
-    setupToolbar();
+    document.getElementById("btn-refresh").addEventListener("click", refreshData);
+    document.getElementById("btn-back").addEventListener("click", showOverview);
     loadData();
   }
 
@@ -15,10 +16,7 @@
       const res = await fetch("/api/graph");
       graphData = await res.json();
       updateStats();
-      renderFlowList();
-      if (graphData.flows.length > 0) {
-        selectFlow(graphData.flows[0].id);
-      }
+      showOverview();
       showLoading(false);
     } catch (err) {
       console.error("Failed to load:", err);
@@ -32,10 +30,7 @@
       const res = await fetch("/api/refresh", { method: "POST" });
       graphData = await res.json();
       updateStats();
-      renderFlowList();
-      if (graphData.flows.length > 0) {
-        selectFlow(graphData.flows[0].id);
-      }
+      showOverview();
       showLoading(false);
     } catch (err) {
       console.error("Refresh failed:", err);
@@ -51,129 +46,232 @@
     if (!graphData) return;
     const s = graphData.stats;
     document.getElementById("stats").textContent =
-      `${s.totalFlows} flows \u00b7 ${s.totalFunctions} functions`;
+      `${s.totalFiles} files \u00b7 ${s.totalFunctions} functions`;
   }
 
-  // ─── Sidebar ───
-  function renderFlowList() {
-    const container = document.getElementById("flow-items");
-    container.innerHTML = "";
+  // ═══════════ OVERVIEW ═══════════
+  function showOverview() {
+    currentView = "overview";
+    document.getElementById("btn-back").classList.add("hidden");
+    document.getElementById("flow-detail").classList.add("hidden");
+    document.getElementById("overview").classList.remove("hidden");
 
-    const meaningfulFlows = graphData.flows.filter((f) => f.steps.length > 1);
-    const standaloneFlows = graphData.flows.filter((f) => f.steps.length === 1);
-
-    for (const flow of meaningfulFlows) {
-      container.appendChild(createFlowItem(flow));
+    // Health badge
+    const badge = document.getElementById("health-badge");
+    const s = graphData.stats;
+    if (s.totalIssues === 0) {
+      badge.className = "health-badge good";
+      badge.textContent = "All good";
+    } else if (s.errors > 0) {
+      badge.className = "health-badge error";
+      badge.textContent = `${s.totalIssues} issue${s.totalIssues > 1 ? "s" : ""} found`;
+    } else {
+      badge.className = "health-badge warning";
+      badge.textContent = `${s.totalIssues} warning${s.totalIssues > 1 ? "s" : ""}`;
     }
 
-    if (standaloneFlows.length > 0) {
-      const divider = document.createElement("div");
-      divider.className = "flow-list-header";
-      divider.textContent = "Helpers";
-      divider.style.marginTop = "12px";
-      container.appendChild(divider);
+    renderOverview();
+  }
 
-      for (const flow of standaloneFlows) {
-        container.appendChild(createFlowItem(flow));
+  function renderOverview() {
+    const el = document.getElementById("overview");
+    el.innerHTML = "";
+
+    // Issues banner
+    if (graphData.issues.length > 0) {
+      el.appendChild(renderIssuesBanner());
+    } else {
+      const good = document.createElement("div");
+      good.className = "issues-banner all-good";
+      good.innerHTML = `
+        <span class="issues-icon">\u2705</span>
+        <div class="issues-text">
+          <h2>Looking good</h2>
+          <p>No issues detected in your codebase.</p>
+        </div>
+      `;
+      el.appendChild(good);
+    }
+
+    // Flow cards
+    const mainFlows = graphData.flows.filter((f) => f.steps.length > 1);
+    const helpers = graphData.flows.filter((f) => f.steps.length === 1);
+
+    if (mainFlows.length > 0) {
+      const title = document.createElement("div");
+      title.className = "flows-section-title";
+      title.textContent = `Your app's flows (${mainFlows.length})`;
+      el.appendChild(title);
+
+      const grid = document.createElement("div");
+      grid.className = "flow-grid";
+      for (const flow of mainFlows) {
+        grid.appendChild(renderFlowCard(flow));
       }
+      el.appendChild(grid);
+    }
+
+    if (helpers.length > 0) {
+      const title = document.createElement("div");
+      title.className = "flows-section-title";
+      title.textContent = `Helper functions (${helpers.length})`;
+      el.appendChild(title);
+
+      const grid = document.createElement("div");
+      grid.className = "flow-grid";
+      for (const flow of helpers) {
+        grid.appendChild(renderFlowCard(flow));
+      }
+      el.appendChild(grid);
     }
   }
 
-  function createFlowItem(flow) {
-    const el = document.createElement("div");
-    el.className = "flow-item";
-    el.dataset.flowId = flow.id;
+  function renderIssuesBanner() {
+    const issues = graphData.issues;
+    const hasErrors = issues.some((i) => i.severity === "error");
 
-    const firstStep = flow.steps[0];
-    const stepWord = flow.steps.length === 1 ? "step" : "steps";
-
-    el.innerHTML = `
-      <span class="flow-item-icon">${firstStep.icon}</span>
-      <div class="flow-item-text">
-        <div class="flow-item-name">${esc(flow.label)}</div>
-        <div class="flow-item-meta">${flow.steps.length} ${stepWord}</div>
+    const banner = document.createElement("div");
+    banner.className = `issues-banner ${hasErrors ? "has-errors" : ""}`;
+    banner.innerHTML = `
+      <span class="issues-icon">${hasErrors ? "\u{1F6A8}" : "\u26A0\uFE0F"}</span>
+      <div class="issues-text">
+        <h2>${issues.length} issue${issues.length > 1 ? "s" : ""} found</h2>
+        <p>These could cause problems for your users.</p>
       </div>
     `;
 
-    el.addEventListener("click", () => selectFlow(flow.id));
-    return el;
+    const list = document.createElement("div");
+    list.className = "issues-list";
+
+    for (const iss of issues) {
+      const item = document.createElement("div");
+      item.className = "issue-item";
+      item.innerHTML = `
+        <span class="issue-dot ${iss.severity}"></span>
+        <span>${esc(iss.description)}</span>
+      `;
+      // Click to navigate to the flow containing this issue
+      item.addEventListener("click", () => {
+        const flow = graphData.flows.find((f) => f.steps.some((s) => s.id === iss.fnId));
+        if (flow) showFlowDetail(flow.id);
+      });
+      list.appendChild(item);
+    }
+
+    banner.appendChild(list);
+    return banner;
   }
 
-  function selectFlow(flowId) {
-    activeFlowId = flowId;
-    document.querySelectorAll(".flow-item").forEach((el) => {
-      el.classList.toggle("active", el.dataset.flowId === flowId);
-    });
+  function renderFlowCard(flow) {
+    const card = document.createElement("div");
+    card.className = "flow-card";
+
+    const firstStep = flow.steps[0];
+
+    // Mini step dots
+    const dotsHtml = flow.steps
+      .map((s, i) => {
+        const dot = `<span class="flow-mini-step ${s.type}"></span>`;
+        const conn = i < flow.steps.length - 1 ? '<span class="flow-mini-connector"></span>' : "";
+        return dot + conn;
+      })
+      .join("");
+
+    card.innerHTML = `
+      <div class="flow-card-health ${flow.health}"></div>
+      <div class="flow-card-header">
+        <span class="flow-card-icon">${firstStep.icon}</span>
+        <span class="flow-card-name">${esc(flow.label)}</span>
+      </div>
+      <div class="flow-card-steps">${dotsHtml}</div>
+      <div class="flow-card-meta">
+        <span>${flow.steps.length} steps</span>
+        ${flow.issues.length > 0 ? `<span style="color: var(--red)">\u00b7 ${flow.issues.length} issue${flow.issues.length > 1 ? "s" : ""}</span>` : ""}
+      </div>
+    `;
+
+    card.addEventListener("click", () => showFlowDetail(flow.id));
+    return card;
+  }
+
+  // ═══════════ FLOW DETAIL ═══════════
+  function showFlowDetail(flowId) {
     const flow = graphData.flows.find((f) => f.id === flowId);
-    if (flow) renderFlow(flow);
+    if (!flow) return;
+
+    currentView = "detail";
+    document.getElementById("btn-back").classList.remove("hidden");
+    document.getElementById("overview").classList.add("hidden");
+    document.getElementById("flow-detail").classList.remove("hidden");
+
+    renderFlowDetail(flow);
   }
 
-  // ─── Flow Rendering ───
-  function renderFlow(flow) {
-    const container = document.getElementById("flow-container");
-    document.getElementById("flow-empty").classList.add("hidden");
-    container.innerHTML = "";
+  function renderFlowDetail(flow) {
+    const el = document.getElementById("flow-detail");
+    el.innerHTML = "";
 
-    // Title
     const title = document.createElement("div");
     title.className = "flow-title";
     title.textContent = flow.label;
-    container.appendChild(title);
+    el.appendChild(title);
 
     const subtitle = document.createElement("div");
     subtitle.className = "flow-subtitle";
-    subtitle.textContent = `${flow.steps.length} steps in this flow`;
-    container.appendChild(subtitle);
+    const issueText = flow.issues.length > 0
+      ? ` \u00b7 ${flow.issues.length} issue${flow.issues.length > 1 ? "s" : ""}`
+      : "";
+    subtitle.textContent = `${flow.steps.length} steps${issueText}`;
+    el.appendChild(subtitle);
 
-    // Steps
     for (let i = 0; i < flow.steps.length; i++) {
-      const step = flow.steps[i];
-      const stepNum = i + 1;
-      container.appendChild(createStepElement(step, stepNum, i === flow.steps.length - 1));
+      el.appendChild(createStepElement(flow.steps[i], i + 1));
     }
   }
 
-  function createStepElement(step, stepNum, isLast) {
+  function createStepElement(step, stepNum) {
     const el = document.createElement("div");
     el.className = "step";
     el.dataset.type = step.type;
 
-    const hasDetails = (step.controlFlow && step.controlFlow.length > 0);
+    const hasDetails = step.controlFlow && step.controlFlow.length > 0;
+    const hasIssues = step.issues && step.issues.length > 0;
 
     el.innerHTML = `
       <div class="step-connector">
         <div class="step-num">${stepNum}</div>
         <div class="step-line"></div>
       </div>
-      <div class="step-card" data-step-id="${esc(step.id)}">
+      <div class="step-card${hasIssues ? " has-issues" : ""}">
         <div class="step-header">
           <span class="step-icon">${step.icon}</span>
           <div class="step-info">
             <div class="step-name">${esc(step.description)}</div>
             <div class="step-code">${esc(step.label)}()</div>
           </div>
-          ${hasDetails ? '<span class="step-expand" title="Show code details">+</span>' : ""}
+          ${hasDetails ? '<span class="step-expand">+</span>' : ""}
         </div>
+        ${hasIssues ? renderStepIssues(step.issues) : ""}
       </div>
     `;
 
     if (hasDetails) {
       const card = el.querySelector(".step-card");
-      const expandBtn = el.querySelector(".step-expand");
+      const btn = el.querySelector(".step-expand");
       card.addEventListener("click", () => {
-        const isExpanded = card.classList.contains("expanded");
-        if (isExpanded) {
+        const expanded = card.classList.contains("expanded");
+        if (expanded) {
           card.classList.remove("expanded");
-          expandBtn.textContent = "+";
-          const existing = card.querySelector(".step-details");
-          if (existing) existing.remove();
+          btn.textContent = "+";
+          const d = card.querySelector(".step-details");
+          if (d) d.remove();
         } else {
           card.classList.add("expanded");
-          expandBtn.textContent = "\u2212";
-          const details = document.createElement("div");
-          details.className = "step-details";
-          details.innerHTML = renderControlFlow(step.controlFlow);
-          card.appendChild(details);
+          btn.textContent = "\u2212";
+          const d = document.createElement("div");
+          d.className = "step-details";
+          d.innerHTML = renderControlFlow(step.controlFlow);
+          card.appendChild(d);
         }
       });
     }
@@ -181,115 +279,68 @@
     return el;
   }
 
-  // ─── Control Flow (code details) ───
-  function renderControlFlow(flowNodes) {
-    if (!flowNodes || flowNodes.length === 0) return "";
-    return flowNodes
-      .map((node) => {
-        switch (node.type) {
-          case "condition":
-            return `<div class="cf-node">
-              <div class="cf-label condition">\u2753 If ${esc(simplifyCondition(node.label))}</div>
-              ${(node.branches || []).map((b) => `
-                <div class="cf-branch">${b.label === "true" ? "\u2714 Yes:" : "\u2716 No:"}</div>
-                <div class="cf-block">${renderControlFlow(b.flow)}</div>
-              `).join("")}
-            </div>`;
-          case "loop":
-            return `<div class="cf-node">
-              <div class="cf-label loop">\u{1F504} Repeat: ${esc(simplifyLoop(node.label))}</div>
-              <div class="cf-block">${renderControlFlow(node.flow)}</div>
-            </div>`;
-          case "try-catch":
-            return `<div class="cf-node">
-              <div class="cf-label try-catch">\u{1F6E1} Try this:</div>
-              <div class="cf-block">${renderControlFlow(node.tryFlow)}</div>
-              ${node.catchFlow?.length
-                ? `<div class="cf-label catch">\u26A0 If something goes wrong:</div>
-                   <div class="cf-block">${renderControlFlow(node.catchFlow)}</div>`
-                : ""}
-            </div>`;
-          case "return":
-            return `<div class="cf-node"><div class="cf-label return">\u2705 Send back the result</div></div>`;
-          case "throw":
-            return `<div class="cf-node"><div class="cf-label throw">\u274C Stop with error</div></div>`;
-          case "call":
-            return `<div class="cf-node"><div class="cf-label call">\u27A1 ${esc(simplifyCall(node.label))}</div></div>`;
-          case "assignment":
-            return `<div class="cf-node"><div class="cf-label assignment">\u{1F4E6} ${esc(simplifyAssignment(node.label))}</div></div>`;
-          case "switch":
-            return `<div class="cf-node">
-              <div class="cf-label switch">\u{1F500} Check different cases</div>
-              ${(node.cases || []).map((c) => `
-                <div class="cf-branch">${esc(c.label)}:</div>
-                <div class="cf-block">${renderControlFlow(c.flow)}</div>
-              `).join("")}
-            </div>`;
-          default:
-            return "";
-        }
-      })
-      .join("");
+  function renderStepIssues(issues) {
+    return `<div class="step-issues">${issues
+      .map((i) => `<div class="step-issue ${i.severity}">\u26A0 ${esc(i.title)}</div>`)
+      .join("")}</div>`;
   }
 
-  // ─── Simplifiers: make code readable ───
-  function simplifyCondition(label) {
-    if (!label) return "condition is met";
-    return label
-      .replace(/^!/, "not ")
-      .replace(/===/g, " is ")
-      .replace(/!==/g, " is not ")
-      .replace(/==/g, " is ")
-      .replace(/!=/g, " is not ")
-      .replace(/&&/g, " and ")
-      .replace(/\|\|/g, " or ")
-      .replace(/\.length\s*<\s*(\d+)/, " is shorter than $1")
-      .replace(/\.length\s*>\s*(\d+)/, " is longer than $1");
+  // ─── Control Flow ───
+  function renderControlFlow(nodes) {
+    if (!nodes || !nodes.length) return "";
+    return nodes.map((n) => {
+      switch (n.type) {
+        case "condition":
+          return `<div class="cf-node"><div class="cf-label condition">\u2753 If ${esc(simplify(n.label))}</div>
+            ${(n.branches||[]).map((b) => `<div class="cf-branch">${b.label==="true"?"\u2714 Yes:":"\u2716 No:"}</div>
+            <div class="cf-block">${renderControlFlow(b.flow)}</div>`).join("")}</div>`;
+        case "loop":
+          return `<div class="cf-node"><div class="cf-label loop">\u{1F504} Repeat</div>
+            <div class="cf-block">${renderControlFlow(n.flow)}</div></div>`;
+        case "try-catch":
+          return `<div class="cf-node"><div class="cf-label try-catch">\u{1F6E1} Try this:</div>
+            <div class="cf-block">${renderControlFlow(n.tryFlow)}</div>
+            ${n.catchFlow?.length?`<div class="cf-label catch">\u26A0 If it fails:</div>
+            <div class="cf-block">${renderControlFlow(n.catchFlow)}</div>`:""}</div>`;
+        case "return":
+          return `<div class="cf-node"><div class="cf-label return">\u2705 Send back result</div></div>`;
+        case "throw":
+          return `<div class="cf-node"><div class="cf-label throw">\u274C Stop with error</div></div>`;
+        case "call":
+          return `<div class="cf-node"><div class="cf-label call">\u27A1 ${esc(simplifyCall(n.label))}</div></div>`;
+        case "assignment":
+          return `<div class="cf-node"><div class="cf-label assignment">\u{1F4E6} ${esc(simplifyAssign(n.label))}</div></div>`;
+        case "switch":
+          return `<div class="cf-node"><div class="cf-label switch">\u{1F500} Check cases</div>
+            ${(n.cases||[]).map((c)=>`<div class="cf-branch">${esc(c.label)}:</div>
+            <div class="cf-block">${renderControlFlow(c.flow)}</div>`).join("")}</div>`;
+        default: return "";
+      }
+    }).join("");
   }
 
-  function simplifyLoop(label) {
-    if (!label) return "for each item";
-    if (label.includes("for (") && label.includes(" of ")) return "for each item in the list";
-    if (label.includes("for (") && label.includes(" in ")) return "for each property";
-    if (label.includes("while")) return "while condition is true";
-    return "for each item";
+  function simplify(s) {
+    if (!s) return "condition is met";
+    return s.replace(/===/g," is ").replace(/!==/g," is not ").replace(/&&/g," and ").replace(/\|\|/g," or ").replace(/^!/,"not ").replace(/\.length\s*<\s*(\d+)/," is shorter than $1");
   }
-
-  function simplifyCall(label) {
-    if (!label) return "Run next step";
-    // Extract just the function name from call expressions
-    const match = label.match(/(?:await\s+)?(\w+(?:\.\w+)*)\s*\(/);
-    if (match) return `Run ${match[1]}`;
-    return label;
+  function simplifyCall(s) {
+    if (!s) return "Run next step";
+    const m = s.match(/(?:await\s+)?(\w+(?:\.\w+)*)\s*\(/);
+    return m ? `Run ${m[1]}` : s;
   }
-
-  function simplifyAssignment(label) {
-    if (!label) return "Prepare data";
-    if (label.includes("req.body")) return "Get data from the request";
-    if (label.includes("req.params")) return "Get parameters from the URL";
-    if (label.includes("req.query")) return "Get query parameters";
-    if (label.startsWith("const ") || label.startsWith("let ") || label.startsWith("var ")) {
-      const varMatch = label.match(/(?:const|let|var)\s+(\{[^}]+\}|\w+)/);
-      if (varMatch) return `Prepare ${varMatch[1].replace(/[{}]/g, "").trim()}`;
+  function simplifyAssign(s) {
+    if (!s) return "Prepare data";
+    if (s.includes("req.body")) return "Get data from request";
+    if (s.startsWith("const ")||s.startsWith("let ")) {
+      const m = s.match(/(?:const|let)\s+(\{[^}]+\}|\w+)/);
+      return m ? `Prepare ${m[1].replace(/[{}]/g,"").trim()}` : "Prepare data";
     }
     return "Prepare data";
   }
 
-  // ─── Toolbar ───
-  function setupToolbar() {
-    document.getElementById("btn-refresh").addEventListener("click", refreshData);
-    document.getElementById("detail-close").addEventListener("click", () => {
-      document.getElementById("detail-panel").classList.add("hidden");
-    });
-  }
-
-  function esc(str) {
-    if (!str) return "";
-    return str
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
+  function esc(s) {
+    if (!s) return "";
+    return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
   }
 
   init();

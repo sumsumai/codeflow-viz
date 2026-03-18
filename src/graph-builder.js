@@ -42,15 +42,185 @@ function buildGraph(analysisResult) {
   // Sort: longest flows first (most interesting)
   flows.sort((a, b) => b.steps.length - a.steps.length);
 
+  // Detect issues across the whole codebase
+  const issues = detectIssues(functions, calls, flows, fnMap, callAdj);
+
+  // Attach issues to their relevant flows/steps
+  for (const flow of flows) {
+    flow.issues = [];
+    for (const step of flow.steps) {
+      step.issues = issues.filter((iss) => iss.fnId === step.id);
+      flow.issues.push(...step.issues);
+    }
+    flow.health = flow.issues.length === 0 ? "good" : flow.issues.some((i) => i.severity === "error") ? "error" : "warning";
+  }
+
   return {
     flows,
+    issues,
     stats: {
       totalFiles: files.length,
       totalFunctions: functions.length,
       totalFlows: flows.length,
       totalSteps: flows.reduce((s, f) => s + f.steps.length, 0),
+      totalIssues: issues.length,
+      errors: issues.filter((i) => i.severity === "error").length,
+      warnings: issues.filter((i) => i.severity === "warning").length,
     },
   };
+}
+
+/**
+ * Detect common problems in the codebase.
+ */
+function detectIssues(functions, calls, flows, fnMap, callAdj) {
+  const issues = [];
+
+  // 1. Unresolved calls — calling something that doesn't exist or can't be found
+  const unresolvedCalls = calls.filter((c) => !c.resolvedTo && c.to !== "require" && !isBuiltIn(c.to));
+  const seenUnresolved = new Set();
+  for (const c of unresolvedCalls) {
+    const key = `${c.from}::${c.to}`;
+    if (seenUnresolved.has(key)) continue;
+    seenUnresolved.add(key);
+    const fromFn = fnMap[c.from];
+    if (fromFn) {
+      issues.push({
+        id: `unresolved_${key}`,
+        fnId: c.from,
+        severity: "warning",
+        type: "unresolved-call",
+        title: `Calls "${c.to}" but it can't be found`,
+        description: `${fromFn.name}() calls ${c.to}() but it's not defined in this codebase. Could be a missing import or typo.`,
+      });
+    }
+  }
+
+  // 2. No error handling — async ENTRY POINTS without try/catch
+  //    (helper functions are expected to throw up to the caller — that's fine)
+  for (const fn of functions) {
+    if (fn.async && fn.controlFlow) {
+      const hasTryCatch = fn.controlFlow.some((n) => n.type === "try-catch");
+      const isEntryPoint = /^handle|^on[A-Z]|^route|^api/.test(fn.name);
+      if (!hasTryCatch && isEntryPoint) {
+        issues.push({
+          id: `no_error_handling_${fn.id}`,
+          fnId: fn.id,
+          severity: "error",
+          type: "no-error-handling",
+          title: "No error handling",
+          description: `${fn.name}() is an entry point with no try/catch. If something fails, the error goes unhandled.`,
+        });
+      }
+    }
+  }
+
+  // 3. Dead code — functions that are never called by anything
+  const calledIds = new Set(calls.filter((c) => c.resolvedTo).map((c) => c.resolvedTo));
+  for (const fn of functions) {
+    if (!fn.exported && !calledIds.has(fn.id)) {
+      // Skip if it's a flow entry point with calls (it's useful)
+      const hasCalls = (callAdj[fn.id] || []).length > 0;
+      if (!hasCalls) {
+        issues.push({
+          id: `dead_code_${fn.id}`,
+          fnId: fn.id,
+          severity: "warning",
+          type: "dead-code",
+          title: "Unused function",
+          description: `${fn.name}() is never called anywhere. It might be dead code that can be removed.`,
+        });
+      }
+    }
+  }
+
+  // 4. Missing validation — entry points that don't validate input
+  for (const fn of functions) {
+    if (/^handle|^on[A-Z]|^route/.test(fn.name)) {
+      const callsInFn = calls.filter((c) => c.from === fn.id);
+      const hasValidation = callsInFn.some((c) => {
+        const name = (c.to || "").toLowerCase();
+        return /valid|check|verify|sanitize|assert/.test(name);
+      });
+      const hasIfCheck = fn.controlFlow?.some((n) => n.type === "condition");
+      if (!hasValidation && !hasIfCheck) {
+        issues.push({
+          id: `no_validation_${fn.id}`,
+          fnId: fn.id,
+          severity: "warning",
+          type: "no-validation",
+          title: "No input validation",
+          description: `${fn.name}() doesn't validate its input. Users could send bad data that causes errors.`,
+        });
+      }
+    }
+  }
+
+  // 5. Large functions — too complex
+  for (const fn of functions) {
+    const complexity = computeComplexity(fn.controlFlow);
+    if (complexity > 10) {
+      issues.push({
+        id: `complex_${fn.id}`,
+        fnId: fn.id,
+        severity: "warning",
+        type: "too-complex",
+        title: "This function does too much",
+        description: `${fn.name}() has a complexity of ${complexity}. Consider breaking it into smaller pieces.`,
+      });
+    }
+  }
+
+  return issues;
+}
+
+function isBuiltIn(name) {
+  if (!name) return true;
+  const builtIns = new Set([
+    "console.log", "console.error", "console.warn",
+    "JSON.parse", "JSON.stringify",
+    "parseInt", "parseFloat", "String", "Number", "Boolean",
+    "Array.from", "Object.keys", "Object.values", "Object.entries",
+    "Math.random", "Math.floor", "Math.ceil", "Math.round",
+    "Date.now", "setTimeout", "setInterval", "clearTimeout", "clearInterval",
+    "Promise.resolve", "Promise.reject", "Promise.all",
+    "Error", "TypeError", "RangeError",
+    "Map", "Set", "WeakMap", "WeakSet",
+    "encodeURIComponent", "decodeURIComponent",
+    "require",
+    "res.json", "res.status", "res.send", "res.redirect",
+    "req.body", "req.params", "req.query",
+    "sessions.get", "sessions.set", "sessions.delete",
+    "users.get", "users.set", "users.delete", "users.values",
+    "result.sort", "result.slice",
+    "re.test",
+  ]);
+  if (builtIns.has(name)) return true;
+  if (name.startsWith("this.") || name.startsWith("console.")) return true;
+  // Common chained methods that appear as standalone calls in the AST
+  const chainMethods = ["json", "status", "send", "redirect", "toString", "toISOString",
+    "toJSON", "slice", "splice", "push", "pop", "shift", "unshift", "map", "filter",
+    "reduce", "forEach", "find", "findIndex", "some", "every", "includes", "indexOf",
+    "join", "split", "trim", "toLowerCase", "toUpperCase", "replace", "match", "test",
+    "sort", "reverse", "concat", "flat", "flatMap", "keys", "values", "entries",
+    "has", "get", "set", "delete", "add", "clear", "then", "catch", "finally",
+    "resolve", "reject", "all", "race", "any", "allSettled",
+    "log", "error", "warn", "info", "debug", "dir", "table",
+    "stringify", "parse", "assign", "freeze", "create",
+    "from", "of", "isArray",
+    "floor", "ceil", "round", "random", "min", "max", "abs",
+    "now", "getTime", "getFullYear", "getMonth", "getDate",
+    "listen", "use", "get", "post", "put", "patch", "delete",
+    "emit", "on", "once", "removeListener",
+    "pipe", "write", "end", "destroy",
+    "readFileSync", "writeFileSync", "existsSync",
+  ];
+  if (chainMethods.includes(name)) return true;
+  // Single-word method calls are likely chained (e.g. .json() on res)
+  if (!name.includes(".") && /^[a-z]/.test(name) && name.length < 15) return true;
+  // obj.method() patterns where obj is a local variable
+  if (name.includes(".") && chainMethods.includes(name.split(".").pop())) return true;
+  return false;
 }
 
 /**

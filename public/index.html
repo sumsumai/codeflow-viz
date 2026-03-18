@@ -11,44 +11,27 @@
     <header id="toolbar">
       <div class="toolbar-left">
         <h1 class="logo">codeflow<span class="logo-dim">-viz</span></h1>
+        <button id="btn-back" class="back-btn hidden">&larr; All flows</button>
       </div>
       <div class="toolbar-right">
         <div id="stats" class="stats"></div>
+        <div id="health-badge" class="health-badge hidden"></div>
         <button id="btn-refresh" class="icon-btn" title="Re-analyze">&#x21bb;</button>
       </div>
     </header>
 
     <div id="main">
-      <!-- Flow sidebar -->
-      <nav id="flow-list">
-        <div class="flow-list-header">User Flows</div>
-        <div id="flow-items"></div>
-      </nav>
+      <!-- Overview: all flows at a glance -->
+      <div id="overview"></div>
 
-      <!-- Flow visualization -->
-      <div id="flow-view">
-        <div id="flow-empty">
-          <p>Select a flow from the sidebar</p>
-        </div>
-        <div id="flow-container"></div>
-      </div>
-
-      <!-- Detail panel for control flow -->
-      <div id="detail-panel" class="panel hidden">
-        <div class="panel-header">
-          <h2 id="detail-title"></h2>
-          <button id="detail-close" class="icon-btn">&times;</button>
-        </div>
-        <div id="detail-meta"></div>
-        <div id="detail-flow"></div>
-      </div>
+      <!-- Detail: one flow expanded -->
+      <div id="flow-detail" class="hidden"></div>
     </div>
 
-    <!-- Loading -->
     <div id="loading" class="overlay">
       <div class="loader">
         <div class="spinner"></div>
-        <p>Analyzing codebase...</p>
+        <p>Analyzing your code...</p>
       </div>
     </div>
   </div>
