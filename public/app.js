@@ -129,60 +129,76 @@
   function renderIssuesBanner() {
     const issues = graphData.issues;
     const hasErrors = issues.some((i) => i.severity === "error");
+    const errors = issues.filter((i) => i.severity === "error");
+    const warnings = issues.filter((i) => i.severity === "warning");
 
     const wrapper = document.createElement("div");
+    wrapper.className = "tickets-section";
 
-    // Header
-    const banner = document.createElement("div");
-    banner.className = `issues-banner ${hasErrors ? "has-errors" : ""}`;
-    banner.innerHTML = `
-      <span class="issues-icon">${hasErrors ? "\u{1F6A8}" : "\u26A0\uFE0F"}</span>
-      <div class="issues-text">
-        <h2>${issues.length} issue${issues.length > 1 ? "s" : ""} found</h2>
-        <p>Here's what's wrong and how to fix it.</p>
+    // Header bar
+    const header = document.createElement("div");
+    header.className = "tickets-header";
+    header.innerHTML = `
+      <div class="tickets-header-left">
+        <span class="tickets-icon">${hasErrors ? "\u{1F6A8}" : "\u26A0\uFE0F"}</span>
+        <h2>${issues.length} thing${issues.length > 1 ? "s" : ""} to fix</h2>
+      </div>
+      <div class="tickets-header-right">
+        ${errors.length > 0 ? `<span class="ticket-count critical">${errors.length} critical</span>` : ""}
+        ${warnings.length > 0 ? `<span class="ticket-count warn">${warnings.length} warning${warnings.length > 1 ? "s" : ""}</span>` : ""}
       </div>
     `;
-    wrapper.appendChild(banner);
+    wrapper.appendChild(header);
 
-    // Individual issue cards with summary + fix prompt
+    // Ticket list
     const list = document.createElement("div");
-    list.className = "issues-detail-list";
+    list.className = "ticket-list";
 
-    for (const iss of issues) {
+    for (let i = 0; i < issues.length; i++) {
+      const iss = issues[i];
+      const ticketId = `CF-${String(i + 1).padStart(3, "0")}`;
+      const priorityLabel = iss.severity === "error" ? "Critical" : "Low";
+      const typeLabel = issueTypeLabel(iss.type);
+
       const card = document.createElement("div");
-      card.className = `issue-card ${iss.severity}`;
+      card.className = `ticket ${iss.severity}`;
       card.innerHTML = `
-        <div class="issue-card-header">
-          <span class="issue-dot ${iss.severity}"></span>
-          <span class="issue-card-title">${esc(iss.title)}</span>
-          <span class="issue-card-file">${esc(iss.file || "")}</span>
+        <div class="ticket-top">
+          <span class="ticket-id">${ticketId}</span>
+          <span class="ticket-priority ${iss.severity}">${priorityLabel}</span>
         </div>
-        <div class="issue-card-summary">${esc(iss.summary || iss.description)}</div>
-        <div class="issue-card-fix">
-          <div class="fix-header">
-            <span>\u{1FA84} Fix it — copy this prompt:</span>
-            <button class="copy-btn" data-prompt="${esc(iss.fix || "")}">Copy</button>
+        <div class="ticket-title">${esc(iss.title)}</div>
+        <div class="ticket-meta">
+          <span class="ticket-type">${typeLabel}</span>
+          <span class="ticket-file">${esc(iss.file || "")}</span>
+        </div>
+        <div class="ticket-summary">${esc(iss.summary || iss.description)}</div>
+        <div class="ticket-fix">
+          <div class="ticket-fix-header">
+            <span>Prompt to fix this:</span>
+            <button class="copy-btn">Copy prompt</button>
           </div>
-          <div class="fix-prompt">${esc(iss.fix || "")}</div>
+          <div class="ticket-fix-prompt">${esc(iss.fix || "")}</div>
+        </div>
+        <div class="ticket-actions">
+          <button class="ticket-btn view-btn">View in flow \u2192</button>
         </div>
       `;
 
-      // Copy button
-      const copyBtn = card.querySelector(".copy-btn");
-      copyBtn.addEventListener("click", (e) => {
+      // Copy
+      card.querySelector(".copy-btn").addEventListener("click", (e) => {
         e.stopPropagation();
+        const btn = e.target;
         navigator.clipboard.writeText(iss.fix || "").then(() => {
-          copyBtn.textContent = "Copied!";
-          copyBtn.classList.add("copied");
-          setTimeout(() => {
-            copyBtn.textContent = "Copy";
-            copyBtn.classList.remove("copied");
-          }, 2000);
+          btn.textContent = "Copied!";
+          btn.classList.add("copied");
+          setTimeout(() => { btn.textContent = "Copy prompt"; btn.classList.remove("copied"); }, 2000);
         });
       });
 
-      // Click card to navigate to flow
-      card.addEventListener("click", () => {
+      // View in flow
+      card.querySelector(".view-btn").addEventListener("click", (e) => {
+        e.stopPropagation();
         const flow = graphData.flows.find((f) => f.steps.some((s) => s.id === iss.fnId));
         if (flow) showFlowDetail(flow.id);
       });
@@ -192,6 +208,17 @@
 
     wrapper.appendChild(list);
     return wrapper;
+  }
+
+  function issueTypeLabel(type) {
+    const labels = {
+      "no-error-handling": "\u{1F6E1} Error handling",
+      "unresolved-call": "\u{1F517} Missing reference",
+      "dead-code": "\u{1F9F9} Cleanup",
+      "no-validation": "\u{1F6AB} Validation",
+      "too-complex": "\u{1F9E9} Complexity",
+    };
+    return labels[type] || type;
   }
 
   function renderFlowCard(flow) {
